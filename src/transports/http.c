@@ -441,8 +441,19 @@ static int send_probe(http_stream *stream)
 	git_http_request request = {0};
 	git_http_response response = {0};
 	bool complete = false;
-	size_t step;
+	size_t step, steps;
 	int error;
+
+	/* NTLM takes two round-trips; Negotiate takes one. */
+	if (transport->server.auth_schemetypes == GIT_AUTHTYPE_NTLM) {
+		steps = 2;
+	} else if (transport->server.auth_schemetypes == GIT_AUTHTYPE_NEGOTIATE) {
+		steps = 1;
+	} else {
+		git_error_set(GIT_ERROR_NET, "unknown authentication scheme");
+		error = -1;
+		goto done;
+	}
 
 	/*
 	 * Send at most two requests: one without any authentication to see
@@ -450,7 +461,7 @@ static int send_probe(http_stream *stream)
 	 * with the first authentication message.  The final authentication
 	 * message with the response will occur with the *actual* POST data.
 	 */
-	for (step = 0; step < 2 && !complete; step++) {
+	for (step = 0; step < steps && !complete; step++) {
 		if ((error = generate_request(&url, &request, stream, len)) < 0 ||
 		    (error = git_http_client_send_request(client, &request)) < 0 ||
 		    (error = git_http_client_send_body(client, probe, len)) < 0 ||
