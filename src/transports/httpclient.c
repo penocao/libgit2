@@ -312,9 +312,12 @@ GIT_INLINE(void) collect_authinfo(
 	}
 }
 
-static int resend_needed(git_http_client *client)
+static int resend_needed(git_http_client *client, git_http_response *response)
 {
 	git_http_auth_context *auth_context;
+
+	if (response->status == 200)
+		return 0;
 
 	if ((auth_context = client->server.auth_context) &&
 	    auth_context->is_complete &&
@@ -362,7 +365,8 @@ static int on_headers_complete(http_parser *parser)
 	                 &ctx->response->proxy_auth_credtypes,
 	                 &ctx->client->proxy.auth_challenges);
 
-	ctx->response->resend_credentials = resend_needed(ctx->client);
+	ctx->response->resend_credentials = resend_needed(ctx->client,
+	                                                  ctx->response);
 
 	/* Stop parsing. */
 	http_parser_pause(parser, 1);
