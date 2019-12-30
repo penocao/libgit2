@@ -574,16 +574,21 @@ static int apply_credentials(
 	if ((error = auth->next_token(&token, auth, credentials)) < 0)
 		goto done;
 
-	error = git_buf_printf(buf, "%s: %s\r\n", header_name, token.ptr);
+	if (auth->is_complete && auth->is_complete(auth)) {
+		/*
+		 * If we're done with an auth mechanism with connection affinity,
+		 * we don't need to send any more headers and can dispose the context.
+		 */
+		if (auth->connection_affinity)
+			free_auth_context(server);
+	} else if (!token.size) {
+		git_error_set(GIT_ERROR_NET, "failed to respond to authentication challange");
+		error = -1;
+		goto done;
+	}
 
-	/*
-	 * If we're done with an auth mechanism with connection affinity,
-	 * we don't need to send any more headers and can dispose the context.
-	 */
-	if (auth->is_complete &&
-	    auth->is_complete(auth) &&
-	    auth->connection_affinity)
-		free_auth_context(server);
+	if (token.size > 0)
+		error = git_buf_printf(buf, "%s: %s\r\n", header_name, token.ptr);
 
 done:
 	git_buf_dispose(&token);
